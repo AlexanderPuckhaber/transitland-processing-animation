@@ -1,3 +1,10 @@
+# Fork: this fork exists because transit.land api v1 was depracated, and I'm trying to get it to work with v2
+
+Unfortunately, the "ScheduleStopPair" information... where the transit vehicles are at specific points in time... was deprecated.
+
+transit.land says here: https://www.transit.land/news/2019/10/17/tlv2.html#gradual-deprecation-of-tlv1
+> The ScheduleStopPair data model is the most expensive part of Tlv1 to run and maintain.
+
 # Visualizing scheduled transit frequency
 
 *TransitFlow* uses Mapzen's [Transitland API](https://transit.land/) to download transit schedule data and [Processing](https://processing.org/) with [Unfolding Maps](http://unfoldingmaps.org/) to animate scheduled transit frequency.
@@ -23,6 +30,8 @@ See here for more [transit flow visualizations](https://vimeopro.com/willgeary/t
 ## Instructions
 - Download the repository, unzip it and `cd` into it
 - `pip install -r requirements.txt` to install the python requirements (pandas, numpy, requests)
+- Create a file called `.env` containing a line `APIKEY=your-api-key-here`
+  - See: https://www.transit.land/documentation/rest-api for getting an API Key
 - `cd transitflow`
 
 Now, you are ready to download transit schedule data and generate visualizations.

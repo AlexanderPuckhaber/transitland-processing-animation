@@ -32,15 +32,15 @@ def seconds_to_hms(value):
 # Helper functions
 def get_vehicle_types(operator_onestop_id):
     """This function will get all **vehicle types** for an operator, by route. So we can ask *"what vehicle type is this particular trip?"* and color code trips by vehicle type."""
-    routes_request = TLAPI.request('routes', operated_by=operator_onestop_id, per_page=PER_PAGE)
-    lookup_vehicle_types = {i['onestop_id']: i['vehicle_type'] for i in routes_request}
+    routes_request = TLAPI.request('routes.json', operator_onestop_id=operator_onestop_id, per_page=PER_PAGE)
+    lookup_vehicle_types = {i['onestop_id']: i['route_type'] for i in routes_request}
     print(len(lookup_vehicle_types.keys()), "routes found.\n")
     return lookup_vehicle_types
 
 # Get stops
 def get_stop_lat_lons(operator_onestop_id):
     """Get stop lats and stop lons for a particular operator."""
-    stops_request = TLAPI.request('stops', served_by=operator_onestop_id, per_page=PER_PAGE)
+    stops_request = TLAPI.request('stops', served_by_onestop_ids=operator_onestop_id, per_page=PER_PAGE)
     lookup_stop_lats = {}
     lookup_stop_lons = {}
     for stop in stops_request:
@@ -53,42 +53,45 @@ def get_stop_lat_lons(operator_onestop_id):
     return lookup_stop_lats, lookup_stop_lons
 
 # Get Schedule data
-def get_schedule_stop_pairs(operator_onestop_id, date):
+def get_schedule_stop_pairs(operator_onestop_id, date, lookup_stop_keys):
     """This function gets origin-destination pairs and timestamps from the schedule stop pairs API. This is the most important function and the largest API request."""
-    ssp_request = TLAPI.request('schedule_stop_pairs', operator_onestop_id=operator_onestop_id, date=date, per_page=PER_PAGE, sort_min_id=0)
-    #print sum(1 for _ in ssp_request), "schedule stop pairs found."
-    origin_times = []
-    destination_times = []
-    origin_stops = []
-    destination_stops = []
-    route_ids = []
-    count=0
-    for i in ssp_request:
-        count+=1
-        if count % 10000 == 0:
-            print(count)
-        if i['frequency_start_time']:
-            start = time_to_seconds(i['frequency_start_time'])
-            now = start
-            end = time_to_seconds(i['frequency_end_time'])
-            incr = i['frequency_headway_seconds']
-            while now <= end:
-                # print "freq: start %s now %s end %s incr %s"%(start, now, end, incr)
-                odt = (time_to_seconds(i['origin_departure_time']) - start) + now
-                dat = (time_to_seconds(i['destination_arrival_time']) - start) + now
-                now += incr
-                origin_times.append(seconds_to_time(odt))
-                destination_times.append(seconds_to_time(dat))
+    # ssp_request = TLAPI.request('schedule_stop_pairs', served_by_onestop_ids=operator_onestop_id, date=date, per_page=PER_PAGE, sort_min_id=0)
+    for stop_key in lookup_stop_keys:
+        ssp_request = TLAPI.request('stops/{}/departures'.format(stop_key), date=date, per_page=PER_PAGE, sort_min_id=0)
+        # print(sum(1 for _ in ssp_request), "schedule stop pairs found!")
+        # print(ssp_request)
+        origin_times = []
+        destination_times = []
+        origin_stops = []
+        destination_stops = []
+        route_ids = []
+        count=0
+        for i in ssp_request:
+            count+=1
+            if count % 10000 == 0:
+                print(count)
+            if i['frequency_start_time']:
+                start = time_to_seconds(i['frequency_start_time'])
+                now = start
+                end = time_to_seconds(i['frequency_end_time'])
+                incr = i['frequency_headway_seconds']
+                while now <= end:
+                    # print "freq: start %s now %s end %s incr %s"%(start, now, end, incr)
+                    odt = (time_to_seconds(i['origin_departure_time']) - start) + now
+                    dat = (time_to_seconds(i['destination_arrival_time']) - start) + now
+                    now += incr
+                    origin_times.append(seconds_to_time(odt))
+                    destination_times.append(seconds_to_time(dat))
+                    origin_stops.append(i['origin_onestop_id'])
+                    destination_stops.append(i['destination_onestop_id'])
+                    route_ids.append(i['route_onestop_id'])
+            else:
+                origin_times.append(i['origin_departure_time'])
+                destination_times.append(i['destination_arrival_time'])
                 origin_stops.append(i['origin_onestop_id'])
                 destination_stops.append(i['destination_onestop_id'])
                 route_ids.append(i['route_onestop_id'])
-        else:
-            origin_times.append(i['origin_departure_time'])
-            destination_times.append(i['destination_arrival_time'])
-            origin_stops.append(i['origin_onestop_id'])
-            destination_stops.append(i['destination_onestop_id'])
-            route_ids.append(i['route_onestop_id'])
-    print(count, "schedule stop pairs found.\n")
+        print(count, "schedule stop pairs found.\n")
     return origin_times, destination_times, origin_stops, destination_stops, route_ids
 
 def calculate_durations(origin_times, destination_times):
@@ -192,7 +195,8 @@ def animate_one_day(operator_onestop_id, date):
     """This is the main function that ties all of the above together!"""
     lookup_vehicle_types = get_vehicle_types(operator_onestop_id)
     lookup_stop_lats, lookup_stop_lons = get_stop_lat_lons(operator_onestop_id)
-    origin_times, destination_times, origin_stops, destination_stops, route_ids = get_schedule_stop_pairs(operator_onestop_id, date)
+    lookup_stop_keys = lookup_stop_lats.keys()
+    origin_times, destination_times, origin_stops, destination_stops, route_ids = get_schedule_stop_pairs(operator_onestop_id, date, lookup_stop_keys)
     durations = calculate_durations(origin_times, destination_times)
     origin_times_clean, destination_times_clean = clean_times(origin_times, destination_times)
     origin_datetimes, destination_datetimes = add_dates(date, origin_times_clean, destination_times_clean)
@@ -222,7 +226,8 @@ def animate_operators(operators, date):
             print("success!")
 
             output.to_csv("sketches/{}/{}/data/indiv_operators/{}.csv".format(OUTPUT_NAME, DATE, i))
-        except Exception:
+        except Exception as e:
+            print(e)
             failures.append(i)
             print("failed:")
 
@@ -351,7 +356,7 @@ if __name__ == "__main__":
     RECORDING = args.recording
 
     TLAPI = TransitlandRequest(
-      host='http://transit.land',
+      host='https://transit.land',
       apikey=args.apikey
     )
 

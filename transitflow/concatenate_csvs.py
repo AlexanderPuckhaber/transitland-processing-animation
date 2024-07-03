@@ -78,12 +78,12 @@ def count_vehicles_on_screen(concatenated_df, date, frames):
                 number_of_ferries.append(number_of_this_mode)
 
         if count % (60*chunks) == 0:
-            print increment
+            print(increment)
 
         count += 1
 
     vehicles = pd.DataFrame(zip(the_day, number_of_vehicles))
-    print len(vehicles.index), "= length of vehicles index"
+    print(len(vehicles.index), "= length of vehicles index")
     buses = pd.DataFrame(zip(the_day, number_of_buses))
     trams = pd.DataFrame(zip(the_day, number_of_trams))
     cablecars = pd.DataFrame(zip(the_day, number_of_cablecars))

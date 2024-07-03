@@ -1,15 +1,21 @@
 import time
 import urllib
 import urllib.request
+from urllib.error import HTTPError
 import json
+import os
+from dotenv import load_dotenv, find_dotenv
+from pathlib import Path
+# create a .env file containing "APIKEY=your-key-here"
+load_dotenv(Path(".env"))
 
 class TransitlandRequest(object):
   """Simple transitland API interface, with rate limits."""
   last_request_time = 0.0 # time of last request
 
-  def __init__(self, host='https://transit.land', apikey=None, ratelimit=8, retrylimit=5):
+  def __init__(self, host='https://transit.land', apikey=None, ratelimit=0.5, retrylimit=5):
     self.host = host
-    self.apikey = apikey
+    self.apikey = os.getenv("APIKEY")
     self.ratelimit = ratelimit
     self.retrylimit = retrylimit
 
@@ -40,11 +46,15 @@ class TransitlandRequest(object):
         else:
           success = True
           data = json.loads(response.read())
-      except Exception:
+      except HTTPError as e:
+        if e.getcode() >= 500:
+          print("server error")
+          retries = self.retrylimit
         retries += 1
+        
         if retries > self.retrylimit:
-          raise e
-        print ("retry %s / %s: %s"%(retries, self.retrylimit))
+          return {}
+        print ("retry %s / %s: %s"%(retries, self.retrylimit, "blank"))
     return data
 
   def request(self, endpoint, **data):
@@ -53,12 +63,15 @@ class TransitlandRequest(object):
     data = data or {}
     if self.apikey:
       data['apikey'] = self.apikey
-
-    next_uri = '%s/api/v1/%s?%s'%(self.host, endpoint, urllib.parse.urlencode(data))
+      
+    next_uri = '%s/api/v2/rest/%s?%s'%(self.host, endpoint, urllib.parse.urlencode(data))
 
     # Pagination
     while next_uri:
         data = self._request(next_uri)
+        if len(data.keys()) == 0:
+          return None
+        
         meta = data.get('meta', {})
         next_uri = meta.get('next')
         # Temporary fix for pagination missing apikey
